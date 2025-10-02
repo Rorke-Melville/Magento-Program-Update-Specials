@@ -1,4 +1,4 @@
-# Magento-Program-Update-Specials
+# Magento-Update-Specials-Program
 This is a php program that automates the updating specials process on Magento. This program removes all products from the specials category and sub-categories, adds the new products that were imported from a CSV file, and automatically sets their special pricing (price, start date, and end date).
 
 ---
