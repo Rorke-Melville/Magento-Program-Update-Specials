@@ -1,14 +1,13 @@
 <?php
+// Update Specials, Update Subcategories & Update Promo Item.php
 /*
-Auther: Rorke Melville
-Update Specials, Update Subcategories & Update Promo Items
-
 Part 1
 1. Get all products with category ID 310
 2. Remove category ID 310 from the products and set promotional_item to 0
 3. Import the CSV file
 4. Get all products from the CSV file based on SKU
 5. Add category ID 310 to the products from the CSV file and set promotional_item to 1
+6. Set special price, special price from date, and special price to date from CSV
 Part 2
 - Define the subcategory IDs to remove
 - Define the category mappings for adding new subcategory IDs
@@ -70,6 +69,11 @@ try {
                 ]
             );
 
+            // Clear special price data
+            $product->setSpecialPrice(null);
+            $product->setSpecialFromDate(null);
+            $product->setSpecialToDate(null);
+
             $productRepository->save($product);
             echo "Removed category ID 310 and set promo item to 0 for product SKU: {$product->getSku()}\n";
         }
@@ -77,7 +81,7 @@ try {
     echo "All products removed successfully.\n";
 
     // 3. Import the CSV file
-    $csvFilePath = '/var/www/html/ace/sftp/Promotion Export.csv'; // Ensure path & file name is correct
+    $csvFilePath = '/var/www/html/Promotion Export.csv'; // Ensure path & file name is correct
     if (!file_exists($csvFilePath)) {
         throw new Exception("CSV file not found: $csvFilePath");
     }
@@ -88,24 +92,35 @@ try {
         throw new Exception("CSV file is empty or invalid.");
     }
 
-    // 4. Get all products from the CSV file based on SKU
-    $skusFromCsv = array_column($csvData, 3); // Assuming the SKU is in column 4 of CSV file
-    $csvProducts = [];
-    foreach ($skusFromCsv as $sku) {
-        try{
-        $product = $productRepository->get($sku);
-        if ($product) {
-            $csvProducts[] = $product;
-        } 
-        }
-        catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
+    // 4. Get all products from the CSV file based on SKU and prepare special price data
+    $csvProductData = [];
+    foreach ($csvData as $row) {
+        $sku = $row[3]; // SKU is in column 4 (index 3)
+        $specialFromDate = $row[1]; // Special price from date in column 2 (index 1)
+        $specialToDate = $row[2]; // Special price to date in column 3 (index 2)
+        $specialPrice = $row[5]; // Special price in column 6 (index 5)
+
+        try {
+            $product = $productRepository->get($sku);
+            if ($product) {
+                $csvProductData[] = [
+                    'product' => $product,
+                    'special_from_date' => $specialFromDate,
+                    'special_to_date' => $specialToDate,
+                    'special_price' => $specialPrice
+                ];
+            }
+        } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
             echo "Can't find product with SKU: $sku\n"; // Log the missing SKU
         }
     }
 
     // 5. Add category ID 310 to the products from the CSV file and set promotional_item to 1
-    foreach ($csvProducts as $product) {
+    // 6. Set special price, special price from date, and special price to date
+    foreach ($csvProductData as $data) {
+        $product = $data['product'];
         $existingCategoryIds = $product->getCategoryIds();
+        
         if (!in_array(310, $existingCategoryIds)) {
             $existingCategoryIds[] = 310; // Add category ID 310
             $product->setCategoryIds(array_unique($existingCategoryIds));
@@ -119,10 +134,31 @@ try {
                     'entity_id = ?' => $product->getId()
                 ]
             );
-
-            $productRepository->save($product);
-            echo "Added category ID 310 and set promo item to 1 for product SKU: {$product->getSku()}\n";
         }
+
+        // Convert date format from YYYYMMDD to YYYY-MM-DD
+        $specialFromDate = null;
+        $specialToDate = null;
+        
+        if (!empty($data['special_from_date']) && strlen($data['special_from_date']) == 8) {
+            $specialFromDate = substr($data['special_from_date'], 0, 4) . '-' . 
+                             substr($data['special_from_date'], 4, 2) . '-' . 
+                             substr($data['special_from_date'], 6, 2);
+        }
+        
+        if (!empty($data['special_to_date']) && strlen($data['special_to_date']) == 8) {
+            $specialToDate = substr($data['special_to_date'], 0, 4) . '-' . 
+                           substr($data['special_to_date'], 4, 2) . '-' . 
+                           substr($data['special_to_date'], 6, 2);
+        }
+
+        // Set special price data
+        $product->setSpecialPrice($data['special_price']);
+        $product->setSpecialFromDate($specialFromDate);
+        $product->setSpecialToDate($specialToDate);
+
+        $productRepository->save($product);
+        echo "Added category ID 310, set promo item to 1, and special price for product SKU: {$product->getSku()} (Price: {$data['special_price']}, From: $specialFromDate, To: $specialToDate)\n";
     }
 
     echo "UpdateSpecials process completed successfully.\n";
@@ -135,8 +171,8 @@ try {
 try {
     // Define the subcategory IDs to remove
     $subcategoryIdsToRemove = array_merge(
-        [282, 283, 284, 285, 286, 305, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 304], // CATEGORY SPECIFIC
-        [311, 312, 313, 314, 315, 316, 333, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332]  // SPECIALS
+        [282, 283, 284, 285, 346, 347, 351, 286, 287, 288, 353, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304], // CATEGORY SPECIFIC
+        [311, 312, 313, 314, 315, 316, 333, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 348, 349, 354, 355]  // SPECIALS
     );
 
     // Define the category mappings for adding new subcategory IDs
@@ -145,9 +181,13 @@ try {
         '63'  => [283, 312],  // Bathroom
         '19'  => [284, 313],  // Bedroom
         '21'  => [285, 314],  // Kitchen
+        '335' => [346, 348],  // Decor
+        '338' => [347, 349],  // Window Decor
+        '350' => [351, 354],  // Storage
         '24'  => [286, 315],  // Castors
         '26'  => [287, 316],  // Connection Fittings
         '15'  => [288, 333],  // Door Sets
+        '352' => [353, 355],  // Hooks
         '102' => [289, 317],  // Edging
         '249' => [290, 318],  // Electricals
         '45'  => [291, 319],  // Fasteners
